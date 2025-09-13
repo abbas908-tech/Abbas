@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Flora Beauty — Shop</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <h1>Flora Beauty</h1>
+    <nav>
+      <button id="cartBtn">Cart (<span id="cartCount">0</span>)</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="products" class="product-grid">
+      <!-- products inserted by JS -->
+    </section>
+
+    <aside id="cartPanel" class="cart-panel hidden">
+      <h2>Your Cart</h2>
+      <ul id="cartList"></ul>
+      <div class="cart-total">Total: $<span id="cartTotal">0.00</span></div>
+      <button id="checkoutBtn">Checkout</button>
+      <button id="closeCart">Close</button>
+    </aside>
+  </main>
+
+  <footer class="site-footer">© <span id="year"></span> Flora Beauty</footer>
+
+<script>
+const API_BASE = 'http://localhost:8080/api';
+let products = [];
+let cart = {};
+
+function formatPrice(p) { return p.toFixed(2); }
+
+async function fetchProducts(){
+  try{
+    const res = await fetch(API_BASE + '/products');
+    products = await res.json();
+    renderProducts();
+  }catch(e){
+    console.error('Failed to fetch products', e);
+    document.getElementById('products').innerHTML = '<p class="error">Failed to load products. Make sure the backend is running.</p>';
+  }
+}
+
+function renderProducts(){
+  const container = document.getElementById('products');
+  container.innerHTML = '';
+  products.forEach(p => {
+    const card = document.createElement('article');
+    card.className = 'product-card';
+    card.innerHTML = `
+      <img src="${p.image || 'https://via.placeholder.com/300x200?text=Flora+Beauty'}" alt="${p.name}" />
+      <h3>${p.name}</h3>
+      <p class="desc">${p.description}</p>
+      <div class="price-row">$${formatPrice(p.price)} <button data-id="${p.id}" class="addBtn">Add</button></div>
+    `;
+    container.appendChild(card);
+  });
+  document.querySelectorAll('.addBtn').forEach(btn => btn.addEventListener('click', e => addToCart(e.target.dataset.id)));
+}
+
+function addToCart(id){
+  const p = products.find(x => String(x.id) === String(id));
+  if(!p) return;
+  cart[id] = cart[id] || { ...p, qty: 0 };
+  cart[id].qty += 1;
+  updateCartUI();
+}
+
+function removeFromCart(id){
+  delete cart[id];
+  updateCartUI();
+}
+
+function updateCartUI(){
+  const list = document.getElementById('cartList');
+  list.innerHTML = '';
+  let total = 0;
+  let count = 0;
+  Object.values(cart).forEach(item => {
+    const li = document.createElement('li');
+    li.innerHTML = `${item.name} — $${formatPrice(item.price)} × ${item.qty} <button data-id="${item.id}" class="removeBtn">Remove</button>`;
+    list.appendChild(li);
+    count += item.qty;
+    total += item.qty * item.price;
+  });
+  document.getElementById('cartCount').innerText = count;
+  document.getElementById('cartTotal').innerText = formatPrice(total);
+  document.querySelectorAll('.removeBtn').forEach(b => b.addEventListener('click', e => { const id=e.target.dataset.id; removeFromCart(id); }));
+}
+
+async function checkout(){
+  const items = Object.values(cart).map(i => ({ productId: i.id, quantity: i.qty }));
+  if(items.length === 0) { alert('Cart is empty'); return; }
+  const order = {
+    customer: { name: 'Guest', email: 'guest@example.com' },
+    items
+  };
+  try{
+    const res = await fetch(API_BASE + '/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(order)
+    });
+    const data = await res.json();
+    alert('Order placed! Order id: ' + data.orderId);
+    cart = {}; updateCartUI(); toggleCart(false);
+  }catch(e){
+    console.error('Checkout error', e);
+    alert('Checkout failed. See console for details.');
+  }
+}
+
+function toggleCart(show){
+  const panel = document.getElementById('cartPanel');
+  panel.classList.toggle('hidden', !show);
+}
+
+document.getElementById('cartBtn').addEventListener('click', () => toggleCart(true));
+document.getElementById('closeCart').addEventListener('click', () => toggleCart(false));
+document.getElementById('checkoutBtn').addEventListener('click', checkout);
+
+document.getElementById('year').innerText = new Date().getFullYear();
+
+fetchProducts();
+</script>
+</body>
+</html>
